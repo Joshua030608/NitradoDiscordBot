@@ -1,0 +1,16 @@
+[Unit]
+Description=Nitrado ARK Discord log bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/nitrado-discord-bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m ark_log_bot
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
