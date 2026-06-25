@@ -10,6 +10,7 @@ from typing import Callable, TypeVar
 from .alert_format import EVENTS_PER_EMBED, build_event_embed_dicts, build_event_message_content
 from .config import AppConfig
 from .monitor import ArkLogMonitor, MonitorEvaluation, MonitorOptions
+from .nitrado import NitradoClient, NitradoError, NitradoGameserver, NitradoService
 from .parser import Event
 from .rcon import ListPlayersResult, RconClient, RconError
 
@@ -50,10 +51,10 @@ class ArkDiscordBot(discord.Client):
         guild = self._configured_guild()
         if guild is not None:
             synced = await self.tree.sync(guild=guild)
-            print(f"Synced {len(synced)} ARK command(s) to guild {guild.id}.")
+            print(f"Synced {len(synced)} Discord command group(s) to guild {guild.id}.")
         else:
             synced = await self.tree.sync()
-            print(f"Synced {len(synced)} global ARK command(s).")
+            print(f"Synced {len(synced)} global Discord command group(s).")
 
         self._poll_task = asyncio.create_task(self._poll_loop(), name="ark-log-poll-loop")
 
@@ -73,32 +74,74 @@ class ArkDiscordBot(discord.Client):
         if self._commands_registered:
             return
 
-        group = app_commands.Group(name="ark", description="ARK server tools")
+        ark_group = app_commands.Group(name="ark", description="ARK server tools")
 
-        @group.command(name="status", description="Show bot, FTP, and RCON status")
+        @ark_group.command(name="status", description="Show bot, FTP, and RCON status")
         async def status(interaction: discord.Interaction) -> None:
             await self._status_command(interaction)
 
-        @group.command(name="players", description="Show connected ARK players using RCON")
+        @ark_group.command(name="players", description="Show connected ARK players using RCON")
         async def players(interaction: discord.Interaction) -> None:
             await self._players_command(interaction)
 
-        @group.command(name="saveworld", description="Save the ARK world using RCON")
+        @ark_group.command(name="saveworld", description="Save the ARK world using RCON")
         async def saveworld(interaction: discord.Interaction) -> None:
             await self._saveworld_command(interaction)
 
-        @group.command(name="broadcast", description="Send an in-game broadcast using RCON")
+        @ark_group.command(name="broadcast", description="Send an in-game broadcast using RCON")
         @app_commands.describe(message="Message to broadcast in-game")
         async def broadcast(interaction: discord.Interaction, message: str) -> None:
             await self._broadcast_command(interaction, message)
 
-        @group.command(name="recent", description="Show recent timeline events sent by the bot")
+        @ark_group.command(name="recent", description="Show recent timeline events sent by the bot")
         @app_commands.describe(count="Number of recent events to show")
         async def recent(interaction: discord.Interaction, count: int = 10) -> None:
             await self._recent_command(interaction, count)
 
+        nitrado_group = app_commands.Group(
+            name="nitrado",
+            description="Nitrado hosting controls",
+        )
+
+        @nitrado_group.command(name="status", description="Show Nitrado gameserver status")
+        async def nitrado_status(interaction: discord.Interaction) -> None:
+            await self._nitrado_status_command(interaction)
+
+        @nitrado_group.command(name="services", description="List Nitrado services visible to the token")
+        async def nitrado_services(interaction: discord.Interaction) -> None:
+            await self._nitrado_services_command(interaction)
+
+        @nitrado_group.command(name="restart", description="Restart the Nitrado gameserver")
+        @app_commands.describe(
+            confirm="Required. Set true to confirm the restart.",
+            message="Optional note for Nitrado logs and in-game chat.",
+        )
+        async def nitrado_restart(
+            interaction: discord.Interaction,
+            confirm: bool = False,
+            message: str = "",
+        ) -> None:
+            await self._nitrado_restart_command(interaction, confirm, message)
+
+        @nitrado_group.command(name="stop", description="Stop the Nitrado gameserver")
+        @app_commands.describe(
+            confirm="Required. Set true to confirm stopping the server.",
+            message="Optional note for Nitrado logs and in-game chat.",
+        )
+        async def nitrado_stop(
+            interaction: discord.Interaction,
+            confirm: bool = False,
+            message: str = "",
+        ) -> None:
+            await self._nitrado_stop_command(interaction, confirm, message)
+
+        @nitrado_group.command(name="start", description="Start the Nitrado gameserver")
+        async def nitrado_start(interaction: discord.Interaction) -> None:
+            await self._nitrado_start_command(interaction)
+
         guild = self._configured_guild()
-        self.tree.add_command(group, guild=guild)
+        self.tree.add_command(ark_group, guild=guild)
+        self.tree.add_command(nitrado_group, guild=guild)
         self._commands_registered = True
 
     def _configured_guild(self) -> discord.Object | None:
@@ -177,6 +220,7 @@ class ArkDiscordBot(discord.Client):
         )
         embed.add_field(name="Monitor", value=self._monitor_status(), inline=False)
         embed.add_field(name="RCON", value=self._rcon_status(), inline=False)
+        embed.add_field(name="Nitrado", value=self._nitrado_config_status(), inline=False)
         embed.add_field(name="Discord", value=self._discord_status(), inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -244,6 +288,114 @@ class ArkDiscordBot(discord.Client):
             ephemeral=True,
         )
 
+    async def _nitrado_status_command(self, interaction: discord.Interaction) -> None:
+        if not await self._require_admin(interaction):
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        try:
+            gameserver = await asyncio.to_thread(
+                self._run_nitrado,
+                lambda client: client.get_gameserver(),
+            )
+        except Exception as exc:
+            await interaction.followup.send(_friendly_nitrado_error(exc), ephemeral=True)
+            return
+
+        await interaction.followup.send(embed=_nitrado_status_embed(gameserver), ephemeral=True)
+
+    async def _nitrado_services_command(self, interaction: discord.Interaction) -> None:
+        if not await self._require_admin(interaction):
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        try:
+            services = await asyncio.to_thread(
+                self._run_nitrado_allowing_missing_service,
+                lambda client: client.list_services(),
+            )
+        except Exception as exc:
+            await interaction.followup.send(_friendly_nitrado_error(exc), ephemeral=True)
+            return
+
+        await interaction.followup.send(embed=_nitrado_services_embed(services), ephemeral=True)
+
+    async def _nitrado_restart_command(
+        self,
+        interaction: discord.Interaction,
+        confirm: bool,
+        message: str,
+    ) -> None:
+        if not await self._require_admin(interaction):
+            return
+        if not confirm:
+            await interaction.response.send_message(
+                "Restart not sent. Run `/nitrado restart confirm: true` to confirm.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        try:
+            response = await asyncio.to_thread(
+                self._run_nitrado,
+                lambda client: client.restart(
+                    message=message,
+                    restart_message=message,
+                ),
+            )
+        except Exception as exc:
+            await interaction.followup.send(_friendly_nitrado_error(exc), ephemeral=True)
+            return
+
+        await interaction.followup.send(f"Nitrado restart requested. {response}", ephemeral=True)
+
+    async def _nitrado_stop_command(
+        self,
+        interaction: discord.Interaction,
+        confirm: bool,
+        message: str,
+    ) -> None:
+        if not await self._require_admin(interaction):
+            return
+        if not confirm:
+            await interaction.response.send_message(
+                "Stop not sent. Run `/nitrado stop confirm: true` to confirm.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        try:
+            response = await asyncio.to_thread(
+                self._run_nitrado,
+                lambda client: client.stop(
+                    message=message,
+                    stop_message=message,
+                ),
+            )
+        except Exception as exc:
+            await interaction.followup.send(_friendly_nitrado_error(exc), ephemeral=True)
+            return
+
+        await interaction.followup.send(f"Nitrado stop requested. {response}", ephemeral=True)
+
+    async def _nitrado_start_command(self, interaction: discord.Interaction) -> None:
+        if not await self._require_admin(interaction):
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        try:
+            response = await asyncio.to_thread(
+                self._run_nitrado,
+                lambda client: client.start(),
+            )
+        except Exception as exc:
+            await interaction.followup.send(_friendly_nitrado_error(exc), ephemeral=True)
+            return
+
+        await interaction.followup.send(f"Nitrado start requested. {response}", ephemeral=True)
+
     async def _require_admin(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id in self.config.discord_admin_user_ids:
             return True
@@ -267,6 +419,26 @@ class ArkDiscordBot(discord.Client):
         ) as client:
             return action(client)
 
+    def _run_nitrado(self, action: Callable[[NitradoClient], T]) -> T:
+        missing = self.config.missing_nitrado_fields()
+        if missing:
+            raise ValueError("Missing Nitrado configuration: " + ", ".join(missing))
+        return self._run_nitrado_allowing_missing_service(action)
+
+    def _run_nitrado_allowing_missing_service(
+        self,
+        action: Callable[[NitradoClient], T],
+    ) -> T:
+        if not self.config.nitrado_api_token:
+            raise ValueError("Missing NITRADO_API_TOKEN")
+
+        client = NitradoClient(
+            api_token=self.config.nitrado_api_token,
+            service_id=self.config.nitrado_service_id,
+            timeout_seconds=self.config.nitrado_timeout_seconds,
+        )
+        return action(client)
+
     def _monitor_status(self) -> str:
         last_poll = _discord_timestamp(self._last_poll_at) if self._last_poll_at else "never"
         lines = [
@@ -285,6 +457,12 @@ class ArkDiscordBot(discord.Client):
         if missing:
             return "Not configured: " + ", ".join(missing)
         return f"Configured for {self.config.rcon_host}:{self.config.rcon_port}"
+
+    def _nitrado_config_status(self) -> str:
+        missing = self.config.missing_nitrado_fields()
+        if missing:
+            return "Not configured: " + ", ".join(missing)
+        return f"Configured for service {self.config.nitrado_service_id}"
 
     def _discord_status(self) -> str:
         guild = str(self.config.discord_guild_id) if self.config.discord_guild_id else "global"
@@ -342,12 +520,78 @@ def _players_embed(result: ListPlayersResult) -> discord.Embed:
     return embed
 
 
+def _nitrado_status_embed(gameserver: NitradoGameserver) -> discord.Embed:
+    color = _nitrado_status_color(gameserver.status)
+    embed = discord.Embed(
+        title="Nitrado gameserver",
+        color=color,
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.add_field(name="Service ID", value=str(gameserver.service_id), inline=True)
+    embed.add_field(name="Status", value=gameserver.status, inline=True)
+    embed.add_field(name="Game", value=gameserver.game_human or gameserver.game or "unknown", inline=True)
+    embed.add_field(name="Address", value=gameserver.address or "unknown", inline=True)
+    embed.add_field(name="Query Port", value=str(gameserver.query_port or "unknown"), inline=True)
+    embed.add_field(name="RCON Port", value=str(gameserver.rcon_port or "unknown"), inline=True)
+    if gameserver.slots is not None:
+        embed.add_field(name="Slots", value=str(gameserver.slots), inline=True)
+    return embed
+
+
+def _nitrado_services_embed(services: list[NitradoService]) -> discord.Embed:
+    embed = discord.Embed(
+        title="Nitrado services",
+        color=0x2E90FA,
+        timestamp=datetime.now(timezone.utc),
+    )
+    if not services:
+        embed.description = "No services were returned for this token."
+        return embed
+
+    lines = []
+    for service in services[:10]:
+        bits = [
+            f"`{service.id}`",
+            service.status,
+            service.game or service.type,
+        ]
+        if service.name:
+            bits.append(service.name)
+        if service.address:
+            bits.append(service.address)
+        lines.append(" - ".join(bits))
+    if len(services) > 10:
+        lines.append(f"...and {len(services) - 10} more")
+    embed.description = "\n".join(lines)
+    embed.set_footer(text="Use the matching service ID as NITRADO_SERVICE_ID.")
+    return embed
+
+
 def _friendly_rcon_error(exc: Exception) -> str:
     if isinstance(exc, ValueError):
         return str(exc)
     if isinstance(exc, RconError):
         return f"RCON failed: {exc}"
     return f"RCON command failed: {exc}"
+
+
+def _friendly_nitrado_error(exc: Exception) -> str:
+    if isinstance(exc, ValueError):
+        return str(exc)
+    if isinstance(exc, NitradoError):
+        return f"Nitrado API failed: {exc}"
+    return f"Nitrado command failed: {exc}"
+
+
+def _nitrado_status_color(status: str) -> int:
+    normalized = status.casefold()
+    if normalized == "started":
+        return 0x12B76A
+    if normalized in {"stopping", "restarting", "installing"}:
+        return 0xF79009
+    if normalized in {"stopped", "suspended", "adminlocked"}:
+        return 0xD92D20
+    return 0x667085
 
 
 def _discord_timestamp(value: datetime) -> str:

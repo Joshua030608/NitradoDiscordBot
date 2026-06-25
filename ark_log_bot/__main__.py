@@ -9,6 +9,7 @@ from .config import AppConfig, load_dotenv
 from .discord_webhook import DiscordWebhook
 from .ftp_client import FtpLogClient
 from .monitor import ArkLogMonitor, MonitorOptions
+from .nitrado import NitradoClient
 from .parser import Event, timezone_converter
 from .rcon import RconClient
 
@@ -83,6 +84,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rcon-command",
         help="Run a specific RCON command and exit. Use carefully.",
+    )
+    parser.add_argument(
+        "--test-nitrado",
+        action="store_true",
+        help="Connect to Nitrado API, fetch gameserver status, and exit.",
+    )
+    parser.add_argument(
+        "--nitrado-services",
+        action="store_true",
+        help="List Nitrado services visible to the configured API token.",
+    )
+    parser.add_argument(
+        "--nitrado-status",
+        action="store_true",
+        help="Fetch configured Nitrado gameserver status and exit.",
     )
     parser.add_argument(
         "--find-log",
@@ -182,6 +198,37 @@ def main(argv: list[str] | None = None) -> int:
             print(response or "RCON command sent.")
             return 0
 
+        if args.nitrado_services:
+            client = _nitrado_client(config, require_service_id=False)
+            services = client.list_services()
+            if not services:
+                print("No Nitrado services returned.")
+            for service in services:
+                parts = [
+                    f"id={service.id}",
+                    f"status={service.status}",
+                    f"type={service.type}",
+                ]
+                if service.game:
+                    parts.append(f"game={service.game}")
+                if service.name:
+                    parts.append(f"name={service.name}")
+                if service.address:
+                    parts.append(f"address={service.address}")
+                print(" ".join(parts))
+            return 0
+
+        if args.test_nitrado or args.nitrado_status:
+            client = _nitrado_client(config, require_service_id=True)
+            gameserver = client.get_gameserver()
+            print(f"service_id={gameserver.service_id}")
+            print(f"status={gameserver.status}")
+            print(f"game={gameserver.game_human or gameserver.game or 'unknown'}")
+            print(f"address={gameserver.address or 'unknown'}")
+            print(f"query_port={gameserver.query_port or 'unknown'}")
+            print(f"rcon_port={gameserver.rcon_port or 'unknown'}")
+            return 0
+
         if args.find_log:
             missing = config.missing_ftp_login_fields()
             if missing:
@@ -235,6 +282,20 @@ def _rcon_client(config: AppConfig) -> RconClient:
         port=config.rcon_port or 0,
         password=config.rcon_password or "",
         timeout_seconds=config.rcon_timeout_seconds,
+    )
+
+
+def _nitrado_client(config: AppConfig, require_service_id: bool) -> NitradoClient:
+    if require_service_id:
+        missing = config.missing_nitrado_fields()
+    else:
+        missing = ["NITRADO_API_TOKEN"] if not config.nitrado_api_token else []
+    if missing:
+        raise ValueError("Missing Nitrado configuration: " + ", ".join(missing))
+    return NitradoClient(
+        api_token=config.nitrado_api_token or "",
+        service_id=config.nitrado_service_id,
+        timeout_seconds=config.nitrado_timeout_seconds,
     )
 
 

@@ -8,7 +8,7 @@ The bot supports two Discord modes:
 
 - Webhook monitor mode posts clean embedded alerts to a channel webhook.
 - Discord bot mode posts the same alerts and adds `/ark` slash commands powered
-  by ARK RCON.
+  by ARK RCON plus optional `/nitrado` hosting controls.
 
 ## Project Steps
 
@@ -21,7 +21,7 @@ The bot supports two Discord modes:
 6. Copy the repo and `.env` to EC2.
 7. Configure a `systemd` service so the bot starts automatically and restarts
    after crashes or reboots.
-8. Configure an optional Discord bot token and RCON settings for slash commands.
+8. Configure Discord bot, RCON, and optional Nitrado API settings for slash commands.
 
 ## Local Setup
 
@@ -103,7 +103,7 @@ the new file as fresh and sends the new startup/timeline events.
 
 ## Discord Bot Commands
 
-All commands are registered under `/ark`.
+ARK commands are registered under `/ark`.
 
 | Command | Purpose |
 | --- | --- |
@@ -115,6 +115,16 @@ All commands are registered under `/ark`.
 
 Admin-only commands are limited to `DISCORD_ADMIN_USER_IDS`. If that variable is
 empty, the bot defaults it to `DISCORD_USER_ID`.
+
+Nitrado hosting commands are registered under `/nitrado`.
+
+| Command | Purpose |
+| --- | --- |
+| `/nitrado status` | Shows Nitrado gameserver status and ports. Admin-only. |
+| `/nitrado services` | Lists services visible to the API token, useful for finding `NITRADO_SERVICE_ID`. Admin-only. |
+| `/nitrado restart confirm:` | Restarts the Nitrado gameserver. Requires `confirm: true`. Admin-only. |
+| `/nitrado stop confirm:` | Stops the Nitrado gameserver. Requires `confirm: true`. Admin-only. |
+| `/nitrado start` | Starts the Nitrado gameserver. Admin-only. |
 
 ## Test RCON
 
@@ -129,6 +139,20 @@ python3 -m ark_log_bot --rcon-command "Broadcast Bot test"
 
 `SaveWorld` may return an empty response on success, so a clean connection and
 no RCON exception is treated as accepted.
+
+## Test Nitrado API
+
+Fill in `NITRADO_API_TOKEN`, then list services to find the service ID:
+
+```sh
+python3 -m ark_log_bot --nitrado-services
+```
+
+After setting `NITRADO_SERVICE_ID`, check the configured gameserver:
+
+```sh
+python3 -m ark_log_bot --test-nitrado
+```
 
 ## Configuration
 
@@ -151,6 +175,9 @@ no RCON exception is treated as accepted.
 | `RCON_PORT` | ARK server RCON port. |
 | `RCON_PASSWORD` | ARK RCON password. |
 | `RCON_TIMEOUT_SECONDS` | Socket timeout for RCON connects and commands. |
+| `NITRADO_API_TOKEN` | Nitrado API bearer token. |
+| `NITRADO_SERVICE_ID` | Numeric Nitrado service ID for this gameserver. |
+| `NITRADO_TIMEOUT_SECONDS` | HTTP timeout for Nitrado API calls. |
 | `SERVER_NAME` | Optional display name for Discord alert footers. |
 | `POLL_SECONDS` | Seconds between checks. |
 | `TIMEZONE` | Display timezone, for example `America/New_York` or `local`. |

@@ -83,6 +83,9 @@ class AppConfig:
     rcon_port: int | None
     rcon_password: str | None
     rcon_timeout_seconds: float
+    nitrado_api_token: str | None
+    nitrado_service_id: int | None
+    nitrado_timeout_seconds: float
     poll_seconds: int
     timezone_name: str
     server_name: str | None
@@ -121,6 +124,9 @@ class AppConfig:
             rcon_port=parse_optional_int(os.getenv("RCON_PORT")),
             rcon_password=os.getenv("RCON_PASSWORD"),
             rcon_timeout_seconds=float(os.getenv("RCON_TIMEOUT_SECONDS", "8")),
+            nitrado_api_token=os.getenv("NITRADO_API_TOKEN"),
+            nitrado_service_id=parse_optional_int(os.getenv("NITRADO_SERVICE_ID")),
+            nitrado_timeout_seconds=float(os.getenv("NITRADO_TIMEOUT_SECONDS", "15")),
             poll_seconds=parse_int(os.getenv("POLL_SECONDS"), 60),
             timezone_name=os.getenv("TIMEZONE", "local"),
             server_name=first_present(("SERVER_NAME", "ARK_SERVER_NAME")),
@@ -171,6 +177,16 @@ class AppConfig:
             ("RCON_HOST", self.rcon_host),
             ("RCON_PORT", self.rcon_port),
             ("RCON_PASSWORD", self.rcon_password),
+        ):
+            if not value:
+                missing.append(field_name)
+        return missing
+
+    def missing_nitrado_fields(self) -> list[str]:
+        missing: list[str] = []
+        for field_name, value in (
+            ("NITRADO_API_TOKEN", self.nitrado_api_token),
+            ("NITRADO_SERVICE_ID", self.nitrado_service_id),
         ):
             if not value:
                 missing.append(field_name)
