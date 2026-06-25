@@ -62,11 +62,13 @@ class RconClient:
         port: int,
         password: str,
         timeout_seconds: float = 8.0,
+        command_quiet_seconds: float = 1.0,
     ) -> None:
         self.host = host
         self.port = port
         self.password = password
         self.timeout_seconds = timeout_seconds
+        self.command_quiet_seconds = command_quiet_seconds
         self._socket: socket.socket | None = None
         self._ids = itertools.count(1000)
 
@@ -113,23 +115,36 @@ class RconClient:
 
         raise RconProtocolError("RCON authentication response was not received")
 
-    def command(self, command: str) -> str:
+    def command(self, command: str, allow_empty_response: bool = False) -> str:
         if not command.strip():
             raise ValueError("RCON command cannot be empty")
 
+        sock = self._require_socket()
+        previous_timeout = sock.gettimeout()
         command_id = self._next_id()
         sentinel_id = self._next_id()
         chunks: list[str] = []
 
-        self._send_packet(RconPacket(command_id, SERVERDATA_EXECCOMMAND, command))
-        self._send_packet(RconPacket(sentinel_id, SERVERDATA_EXECCOMMAND, ""))
+        try:
+            sock.settimeout(self.timeout_seconds)
+            self._send_packet(RconPacket(command_id, SERVERDATA_EXECCOMMAND, command))
+            self._send_packet(RconPacket(sentinel_id, SERVERDATA_EXECCOMMAND, ""))
 
-        while True:
-            packet = self._read_packet()
-            if packet.request_id == sentinel_id:
-                break
-            if packet.request_id == command_id:
-                chunks.append(packet.body)
+            while True:
+                try:
+                    packet = self._read_packet()
+                except RconTimeoutError:
+                    if chunks or allow_empty_response:
+                        break
+                    raise
+
+                if packet.request_id == sentinel_id:
+                    break
+                if packet.request_id == command_id:
+                    chunks.append(packet.body)
+                    sock.settimeout(min(self.command_quiet_seconds, self.timeout_seconds))
+        finally:
+            sock.settimeout(previous_timeout)
 
         return "".join(chunks).strip()
 
@@ -138,13 +153,13 @@ class RconClient:
         return parse_list_players(raw)
 
     def save_world(self) -> str:
-        return self.command("SaveWorld")
+        return self.command("SaveWorld", allow_empty_response=True)
 
     def broadcast(self, message: str) -> str:
         clean_message = " ".join(message.split())
         if not clean_message:
             raise ValueError("Broadcast message cannot be empty")
-        return self.command(f"Broadcast {clean_message}")
+        return self.command(f"Broadcast {clean_message}", allow_empty_response=True)
 
     def _next_id(self) -> int:
         return next(self._ids)

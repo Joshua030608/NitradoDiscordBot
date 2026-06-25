@@ -19,8 +19,9 @@ from ark_log_bot.rcon import (
 
 
 class FakeRconServer:
-    def __init__(self, password: str = "secret") -> None:
+    def __init__(self, password: str = "secret", answer_sentinel: bool = True) -> None:
         self.password = password
+        self.answer_sentinel = answer_sentinel
         self.client_socket, self.server_socket = socket.socketpair()
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._stopped = threading.Event()
@@ -63,7 +64,8 @@ class FakeRconServer:
                 continue
 
             if packet.body == "":
-                _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, ""))
+                if self.answer_sentinel:
+                    _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, ""))
             elif packet.body == "ListPlayers":
                 _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "0. LilGuppy, "))
                 _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "76561198000000000\n1. YasHFlasH1"))
@@ -79,6 +81,13 @@ class RconTests(unittest.TestCase):
     def test_executes_command_and_joins_split_response(self) -> None:
         with FakeRconServer() as server:
             with connected_client(server, "secret") as client:
+                result = client.command("ListPlayers")
+
+        self.assertEqual(result, "0. LilGuppy, 76561198000000000\n1. YasHFlasH1")
+
+    def test_command_returns_after_quiet_period_when_server_ignores_sentinel(self) -> None:
+        with FakeRconServer(answer_sentinel=False) as server:
+            with connected_client(server, "secret", command_quiet_seconds=0.05) as client:
                 result = client.command("ListPlayers")
 
         self.assertEqual(result, "0. LilGuppy, 76561198000000000\n1. YasHFlasH1")
@@ -121,12 +130,24 @@ class RconTests(unittest.TestCase):
 
 
 class connected_client:
-    def __init__(self, server: FakeRconServer, password: str) -> None:
+    def __init__(
+        self,
+        server: FakeRconServer,
+        password: str,
+        command_quiet_seconds: float = 1.0,
+    ) -> None:
         self.server = server
-        self.client = RconClient("socketpair", 0, password)
+        self.client = RconClient(
+            "socketpair",
+            0,
+            password,
+            timeout_seconds=1,
+            command_quiet_seconds=command_quiet_seconds,
+        )
 
     def __enter__(self) -> RconClient:
         self.client._socket = self.server.client_socket
+        self.client._socket.settimeout(self.client.timeout_seconds)
         self.client.authenticate()
         return self.client
 
