@@ -122,13 +122,11 @@ class RconClient:
         sock = self._require_socket()
         previous_timeout = sock.gettimeout()
         command_id = self._next_id()
-        marker_id = self._next_id()
         chunks: list[str] = []
 
         try:
             sock.settimeout(self.timeout_seconds)
             self._send_packet(RconPacket(command_id, SERVERDATA_EXECCOMMAND, command))
-            self._send_packet(RconPacket(marker_id, SERVERDATA_RESPONSE_VALUE, ""))
             if allow_empty_response:
                 sock.settimeout(min(self.command_quiet_seconds, self.timeout_seconds))
 
@@ -140,8 +138,6 @@ class RconClient:
                         break
                     raise
 
-                if packet.request_id == marker_id:
-                    break
                 if packet.request_id == command_id:
                     chunks.append(packet.body)
                     sock.settimeout(min(self.command_quiet_seconds, self.timeout_seconds))

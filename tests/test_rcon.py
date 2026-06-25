@@ -19,9 +19,8 @@ from ark_log_bot.rcon import (
 
 
 class FakeRconServer:
-    def __init__(self, password: str = "secret", answer_sentinel: bool = True) -> None:
+    def __init__(self, password: str = "secret") -> None:
         self.password = password
-        self.answer_sentinel = answer_sentinel
         self.client_socket, self.server_socket = socket.socketpair()
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._stopped = threading.Event()
@@ -60,14 +59,6 @@ class FakeRconServer:
                     _send_packet(conn, RconPacket(-1, SERVERDATA_AUTH_RESPONSE, ""))
                 continue
 
-            if (
-                packet.packet_type == SERVERDATA_RESPONSE_VALUE
-                and packet.body == ""
-                and self.answer_sentinel
-            ):
-                _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, ""))
-                continue
-
             if packet.packet_type != SERVERDATA_EXECCOMMAND:
                 continue
 
@@ -90,8 +81,8 @@ class RconTests(unittest.TestCase):
 
         self.assertEqual(result, "0. LilGuppy, 76561198000000000\n1. YasHFlasH1")
 
-    def test_command_returns_after_quiet_period_when_server_ignores_sentinel(self) -> None:
-        with FakeRconServer(answer_sentinel=False) as server:
+    def test_command_returns_after_quiet_period(self) -> None:
+        with FakeRconServer() as server:
             with connected_client(server, "secret", command_quiet_seconds=0.05) as client:
                 result = client.command("ListPlayers")
 
