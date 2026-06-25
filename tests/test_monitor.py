@@ -87,7 +87,9 @@ class MonitorTests(unittest.TestCase):
                 (
                     '{"initialized": true, "last_log_size": 0, '
                     '"seen_event_keys": [], '
-                    '"recent_presence_keys": ["LEAVE:yashflash1"]}'
+                    '"recent_presence_events": {'
+                    '"LEAVE:yashflash1": "2026-06-25T21:45:00+00:00"'
+                    "}}"
                 ),
                 encoding="utf-8",
             )
@@ -97,6 +99,40 @@ class MonitorTests(unittest.TestCase):
             self.assertEqual(
                 [event.category for event in evaluation.events_to_send],
                 ["STARTUP", "JOIN"],
+            )
+
+    def test_presence_dedupe_expires_for_future_log_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log_path = temp_path / "ShooterGame.log"
+            state_path = temp_path / "state.json"
+            log_path.write_text(LEAVE_LOG, encoding="utf-8")
+            config = _config(state_path)
+            config.rcon_host = "127.0.0.1"
+            config.rcon_port = 27020
+            config.rcon_password = "secret"
+            config.rcon_presence_dedupe_seconds = 60
+
+            monitor = ArkLogMonitor(
+                config,
+                MonitorOptions(local_log=log_path, no_discord=True, send_existing=True),
+            )
+            state_path.write_text(
+                (
+                    '{"initialized": true, "last_log_size": 0, '
+                    '"seen_event_keys": [], '
+                    '"recent_presence_events": {'
+                    '"LEAVE:yashflash1": "2026-06-25T21:45:00+00:00"'
+                    "}}"
+                ),
+                encoding="utf-8",
+            )
+
+            evaluation = monitor.evaluate_once()
+
+            self.assertEqual(
+                [event.category for event in evaluation.events_to_send],
+                ["STARTUP", "JOIN", "LEAVE"],
             )
 
 
@@ -120,6 +156,7 @@ def _config(state_file: Path) -> AppConfig:
         rcon_password=None,
         rcon_timeout_seconds=8,
         rcon_presence_poll_seconds=15,
+        rcon_presence_dedupe_seconds=7200,
         nitrado_api_token=None,
         nitrado_service_id=None,
         nitrado_timeout_seconds=15,

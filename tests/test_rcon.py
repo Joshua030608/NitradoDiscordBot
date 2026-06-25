@@ -60,13 +60,18 @@ class FakeRconServer:
                     _send_packet(conn, RconPacket(-1, SERVERDATA_AUTH_RESPONSE, ""))
                 continue
 
+            if (
+                packet.packet_type == SERVERDATA_RESPONSE_VALUE
+                and packet.body == ""
+                and self.answer_sentinel
+            ):
+                _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, ""))
+                continue
+
             if packet.packet_type != SERVERDATA_EXECCOMMAND:
                 continue
 
-            if packet.body == "":
-                if self.answer_sentinel:
-                    _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, ""))
-            elif packet.body == "ListPlayers":
+            if packet.body == "ListPlayers":
                 _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "0. LilGuppy, "))
                 _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "76561198000000000\n1. YasHFlasH1"))
             elif packet.body == "SaveWorld":

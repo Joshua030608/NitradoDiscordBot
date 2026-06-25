@@ -73,12 +73,15 @@ class ArkLogMonitor:
 
         seen = set(state.seen_event_keys)
         new_events = [event for event in report.events if event_key(event) not in seen]
-        if self.config.rcon_presence_enabled() and state.recent_presence_keys:
-            presence_keys = set(state.recent_presence_keys)
+        if self.config.rcon_presence_enabled() and state.recent_presence_events:
             new_events = [
                 event
                 for event in new_events
-                if _presence_dedupe_key(event) not in presence_keys
+                if not _is_rcon_presence_duplicate(
+                    event,
+                    state,
+                    self.config.rcon_presence_dedupe_seconds,
+                )
             ]
         first_run = not state.initialized
         send_existing = (
@@ -115,7 +118,7 @@ class ArkLogMonitor:
             [event_key(event) for event in evaluation.report.events],
             self.config.max_seen_events,
         )
-        state.save(self.config.state_file)
+        state.save_monitor_update(self.config.state_file)
 
     def _download_log(self) -> bytes:
         if self.options.local_log is not None:
@@ -176,3 +179,20 @@ def _presence_dedupe_key(event: Event) -> str | None:
     if not player_name:
         return None
     return f"{category}:{player_name.casefold()}"
+
+
+def _is_rcon_presence_duplicate(
+    event: Event,
+    state: BotState,
+    dedupe_seconds: int,
+) -> bool:
+    key = _presence_dedupe_key(event)
+    if key is None or dedupe_seconds <= 0:
+        return False
+
+    seen_at = state.presence_seen_at(key)
+    if seen_at is None:
+        return False
+
+    age_seconds = abs((event.timestamp - seen_at).total_seconds())
+    return age_seconds <= dedupe_seconds

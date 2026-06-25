@@ -143,7 +143,9 @@ no RCON exception is treated as accepted.
 The bot also polls RCON for player presence when RCON is configured. This gives
 faster join/leave alerts than waiting for Nitrado FTP to expose delayed
 `ShooterGame.log` writes. Set `RCON_PRESENCE_POLL_SECONDS=0` to disable the
-live presence watcher.
+live presence watcher. Delayed FTP join/leave lines are suppressed only when
+they happen close to a matching RCON live alert; tune that window with
+`RCON_PRESENCE_DEDUPE_SECONDS`.
 
 ## Test Nitrado API
 
@@ -181,6 +183,7 @@ python3 -m ark_log_bot --test-nitrado
 | `RCON_PASSWORD` | ARK RCON password. |
 | `RCON_TIMEOUT_SECONDS` | Socket timeout for RCON connects and commands. |
 | `RCON_PRESENCE_POLL_SECONDS` | Seconds between live RCON player join/leave checks. Set `0` to disable. |
+| `RCON_PRESENCE_DEDUPE_SECONDS` | Seconds a delayed FTP join/leave can match a recent RCON live alert. |
 | `NITRADO_API_TOKEN` | Nitrado API bearer token. |
 | `NITRADO_SERVICE_ID` | Numeric Nitrado service ID for this gameserver. |
 | `NITRADO_TIMEOUT_SECONDS` | HTTP timeout for Nitrado API calls. |

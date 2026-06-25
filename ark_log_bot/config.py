@@ -84,6 +84,7 @@ class AppConfig:
     rcon_password: str | None
     rcon_timeout_seconds: float
     rcon_presence_poll_seconds: int
+    rcon_presence_dedupe_seconds: int
     nitrado_api_token: str | None
     nitrado_service_id: int | None
     nitrado_timeout_seconds: float
@@ -126,6 +127,10 @@ class AppConfig:
             rcon_password=os.getenv("RCON_PASSWORD"),
             rcon_timeout_seconds=float(os.getenv("RCON_TIMEOUT_SECONDS", "8")),
             rcon_presence_poll_seconds=parse_int(os.getenv("RCON_PRESENCE_POLL_SECONDS"), 15),
+            rcon_presence_dedupe_seconds=parse_int(
+                os.getenv("RCON_PRESENCE_DEDUPE_SECONDS"),
+                7200,
+            ),
             nitrado_api_token=os.getenv("NITRADO_API_TOKEN"),
             nitrado_service_id=parse_optional_int(os.getenv("NITRADO_SERVICE_ID")),
             nitrado_timeout_seconds=float(os.getenv("NITRADO_TIMEOUT_SECONDS", "15")),

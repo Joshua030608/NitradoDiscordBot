@@ -246,7 +246,7 @@ class ArkDiscordBot(discord.Client):
         if not state.presence_initialized:
             state.presence_initialized = True
             state.online_players = current_players
-            state.save(self.config.state_file)
+            state.save_presence_update(self.config.state_file)
             self._last_presence_poll_at = now
             self._last_presence_error = None
             print(f"RCON presence baseline saved with {len(current_players)} online player(s).")
@@ -278,8 +278,8 @@ class ArkDiscordBot(discord.Client):
 
         state.online_players = current_players
         if presence_keys:
-            state.remember_presence(presence_keys)
-        state.save(self.config.state_file)
+            state.remember_presence(presence_keys, now)
+        state.save_presence_update(self.config.state_file)
         self._last_presence_poll_at = now
         self._last_presence_error = None
         self._last_presence_sent_count = len(events)
