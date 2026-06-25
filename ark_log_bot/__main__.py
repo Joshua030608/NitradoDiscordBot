@@ -10,6 +10,7 @@ from .discord_webhook import DiscordWebhook
 from .ftp_client import FtpLogClient
 from .monitor import ArkLogMonitor, MonitorOptions
 from .parser import Event, timezone_converter
+from .rcon import RconClient
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +36,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Process one poll and exit.",
     )
     parser.add_argument(
+        "--bot",
+        action="store_true",
+        help="Run the Discord gateway bot with slash commands.",
+    )
+    parser.add_argument(
+        "--webhook-monitor",
+        action="store_true",
+        help="Force webhook monitor mode even if Discord bot settings are present.",
+    )
+    parser.add_argument(
         "--send-existing",
         action="store_true",
         help="On first run, send existing events instead of only saving a baseline.",
@@ -53,6 +64,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--test-discord",
         action="store_true",
         help="Send one test message to the configured Discord webhook and exit.",
+    )
+    parser.add_argument(
+        "--test-rcon",
+        action="store_true",
+        help="Connect to RCON, run ListPlayers, print the result, and exit.",
+    )
+    parser.add_argument(
+        "--rcon-list-players",
+        action="store_true",
+        help="Run the RCON ListPlayers command and exit.",
+    )
+    parser.add_argument(
+        "--rcon-saveworld",
+        action="store_true",
+        help="Run the RCON SaveWorld command and exit.",
+    )
+    parser.add_argument(
+        "--rcon-command",
+        help="Run a specific RCON command and exit. Use carefully.",
     )
     parser.add_argument(
         "--find-log",
@@ -92,6 +122,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Local log not found: {local_log}", file=sys.stderr)
         return 2
 
+    if args.bot and args.webhook_monitor:
+        print("Use either --bot or --webhook-monitor, not both.", file=sys.stderr)
+        return 2
+
+    if args.bot and args.once:
+        print("--bot runs continuously. Remove --once to start bot mode.", file=sys.stderr)
+        return 2
+
     options = MonitorOptions(
         local_log=local_log,
         no_discord=args.no_discord,
@@ -116,6 +154,32 @@ def main(argv: list[str] | None = None) -> int:
             )
             webhook.send_events([test_event], config.timezone_name)
             print("Discord test message sent.")
+            return 0
+
+        if args.test_rcon or args.rcon_list_players:
+            with _rcon_client(config) as client:
+                result = client.list_players()
+            if result.players:
+                print(f"{len(result.players)} player(s) online:")
+                for player in result.players:
+                    suffix = f" ({player.steam_id})" if player.steam_id else ""
+                    print(f"{player.index}. {player.name}{suffix}")
+            else:
+                print("No players online.")
+                if result.raw:
+                    print(result.raw)
+            return 0
+
+        if args.rcon_saveworld:
+            with _rcon_client(config) as client:
+                response = client.save_world()
+            print(response or "SaveWorld command sent.")
+            return 0
+
+        if args.rcon_command:
+            with _rcon_client(config) as client:
+                response = client.command(args.rcon_command)
+            print(response or "RCON command sent.")
             return 0
 
         if args.find_log:
@@ -147,6 +211,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.once:
             count = monitor.process_once()
             print(f"Done. {count} event(s) processed.")
+        elif args.bot or (config.enable_discord_bot and not args.webhook_monitor):
+            from .discord_bot import run_discord_bot
+
+            run_discord_bot(config, options)
         else:
             monitor.run_forever()
     except KeyboardInterrupt:
@@ -156,6 +224,18 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     return 0
+
+
+def _rcon_client(config: AppConfig) -> RconClient:
+    missing = config.missing_rcon_fields()
+    if missing:
+        raise ValueError("Missing RCON configuration: " + ", ".join(missing))
+    return RconClient(
+        host=config.rcon_host or "",
+        port=config.rcon_port or 0,
+        password=config.rcon_password or "",
+        timeout_seconds=config.rcon_timeout_seconds,
+    )
 
 
 if __name__ == "__main__":

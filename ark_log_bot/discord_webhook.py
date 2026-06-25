@@ -5,12 +5,14 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
+from .alert_format import EVENTS_PER_EMBED, build_event_embed_dicts, build_event_message_content
 from .parser import Event, display_time
 
 
 DISCORD_LIMIT = 2000
-MESSAGE_BUDGET = 1850
 EVENT_LINE_LIMIT = 360
+MAX_EMBEDS_PER_MESSAGE = 10
+MAX_EVENTS_PER_MESSAGE = EVENTS_PER_EMBED * MAX_EMBEDS_PER_MESSAGE
 
 
 @dataclass
@@ -19,49 +21,37 @@ class DiscordWebhook:
     mention_user_id: str | None = None
     timeout_seconds: int = 15
 
-    def send_events(self, events: list[Event], timezone_name: str) -> None:
-        for content in self._build_messages(events, timezone_name):
-            self._post(content)
-
-    def _build_messages(self, events: list[Event], timezone_name: str) -> list[str]:
+    def send_events(
+        self,
+        events: list[Event],
+        timezone_name: str,
+        server_name: str | None = None,
+        source_name: str = "ShooterGame.log",
+    ) -> None:
         if not events:
-            return []
+            return
 
-        prefix = ""
-        if self.mention_user_id:
-            prefix = f"<@{self.mention_user_id}> "
+        for events_chunk in _chunks(events, MAX_EVENTS_PER_MESSAGE):
+            embeds = build_event_embed_dicts(
+                events_chunk,
+                timezone_name,
+                server_name=server_name,
+                source_name=source_name,
+            )
+            payload = {
+                "content": build_event_message_content(
+                    events_chunk, self.mention_user_id
+                )[:DISCORD_LIMIT],
+                "embeds": embeds,
+                "allowed_mentions": _allowed_mentions(self.mention_user_id),
+            }
+            self._post_payload(payload)
 
-        header = f"{prefix}**ARK server activity**"
-        lines = [format_discord_event(event, timezone_name) for event in events]
-        messages: list[str] = []
-        current: list[str] = []
-        current_length = len(header) + len("\n```text\n```")
-
-        for line in lines:
-            projected = current_length + len(line) + 1
-            if current and projected > MESSAGE_BUDGET:
-                messages.append(_wrap_code_block(header, current))
-                current = []
-                current_length = len(header) + len("\n```text\n```")
-            current.append(line)
-            current_length += len(line) + 1
-
-        if current:
-            messages.append(_wrap_code_block(header, current))
-
-        return [message[:DISCORD_LIMIT] for message in messages]
-
-    def _post(self, content: str) -> None:
-        allowed_mentions = {"parse": []}
-        if self.mention_user_id:
-            allowed_mentions["users"] = [self.mention_user_id]
-
-        payload = json.dumps(
-            {"content": content, "allowed_mentions": allowed_mentions}
-        ).encode("utf-8")
+    def _post_payload(self, payload: dict) -> None:
+        data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             self.url,
-            data=payload,
+            data=data,
             headers={
                 "Content-Type": "application/json",
                 "User-Agent": "ArkLogBot/0.1",
@@ -77,13 +67,19 @@ class DiscordWebhook:
             raise RuntimeError(f"Discord webhook returned HTTP {exc.code}: {body}") from exc
 
 
+def _allowed_mentions(mention_user_id: str | None) -> dict:
+    if mention_user_id:
+        return {"users": [mention_user_id]}
+    return {"parse": []}
+
+
+def _chunks(items: list[Event], size: int) -> list[list[Event]]:
+    return [items[index : index + size] for index in range(0, len(items), size)]
+
+
 def format_discord_event(event: Event, timezone_name: str) -> str:
     shown = display_time(event.timestamp, timezone_name)
     line = f"{shown:%I:%M:%S %p} [{event.category:<12}] {event.message}"
     if len(line) <= EVENT_LINE_LIMIT:
         return line
     return line[: EVENT_LINE_LIMIT - 3] + "..."
-
-
-def _wrap_code_block(header: str, lines: list[str]) -> str:
-    return f"{header}\n```text\n" + "\n".join(lines) + "\n```"

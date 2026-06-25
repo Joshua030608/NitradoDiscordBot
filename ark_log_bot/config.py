@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
@@ -18,6 +19,28 @@ def parse_int(value: str | None, default: int) -> int:
     if value is None or not value.strip():
         return default
     return int(value)
+
+
+def parse_optional_int(value: str | None) -> int | None:
+    if value is None or not value.strip():
+        return None
+    return int(value)
+
+
+def parse_int_set(value: str | None) -> set[int]:
+    if value is None or not value.strip():
+        return set()
+
+    cleaned = value.replace(",", " ")
+    return {int(part.strip()) for part in cleaned.split() if part.strip()}
+
+
+def first_present(names: Iterable[str]) -> str | None:
+    for name in names:
+        value = os.getenv(name)
+        if value is not None and value.strip():
+            return value.strip()
+    return None
 
 
 def load_dotenv(path: Path) -> None:
@@ -45,14 +68,24 @@ def load_dotenv(path: Path) -> None:
 class AppConfig:
     discord_webhook_url: str | None
     discord_user_id: str | None
+    discord_bot_token: str | None
+    discord_guild_id: int | None
+    discord_alert_channel_id: int | None
+    discord_admin_user_ids: set[int]
+    enable_discord_bot: bool
     ftp_host: str | None
     ftp_port: int
     ftp_username: str | None
     ftp_password: str | None
     ftp_path: str | None
     ftp_use_tls: bool
+    rcon_host: str | None
+    rcon_port: int | None
+    rcon_password: str | None
+    rcon_timeout_seconds: float
     poll_seconds: int
     timezone_name: str
+    server_name: str | None
     state_file: Path
     send_existing_on_first_run: bool
     include_saves: bool
@@ -60,17 +93,37 @@ class AppConfig:
 
     @classmethod
     def from_env(cls) -> AppConfig:
+        discord_user_id = os.getenv("DISCORD_USER_ID")
+        discord_bot_token = os.getenv("DISCORD_BOT_TOKEN")
+        discord_alert_channel_id = parse_optional_int(os.getenv("DISCORD_ALERT_CHANNEL_ID"))
+        discord_admin_user_ids = parse_int_set(os.getenv("DISCORD_ADMIN_USER_IDS"))
+        if not discord_admin_user_ids and discord_user_id and discord_user_id.strip().isdigit():
+            discord_admin_user_ids = {int(discord_user_id.strip())}
+
         return cls(
             discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL"),
-            discord_user_id=os.getenv("DISCORD_USER_ID"),
+            discord_user_id=discord_user_id,
+            discord_bot_token=discord_bot_token,
+            discord_guild_id=parse_optional_int(os.getenv("DISCORD_GUILD_ID")),
+            discord_alert_channel_id=discord_alert_channel_id,
+            discord_admin_user_ids=discord_admin_user_ids,
+            enable_discord_bot=parse_bool(
+                os.getenv("ENABLE_DISCORD_BOT"),
+                bool(discord_bot_token and discord_alert_channel_id),
+            ),
             ftp_host=os.getenv("FTP_HOST"),
             ftp_port=parse_int(os.getenv("FTP_PORT"), 21),
             ftp_username=os.getenv("FTP_USERNAME"),
             ftp_password=os.getenv("FTP_PASSWORD"),
             ftp_path=os.getenv("FTP_PATH"),
             ftp_use_tls=parse_bool(os.getenv("FTP_USE_TLS"), False),
+            rcon_host=os.getenv("RCON_HOST"),
+            rcon_port=parse_optional_int(os.getenv("RCON_PORT")),
+            rcon_password=os.getenv("RCON_PASSWORD"),
+            rcon_timeout_seconds=float(os.getenv("RCON_TIMEOUT_SECONDS", "8")),
             poll_seconds=parse_int(os.getenv("POLL_SECONDS"), 60),
             timezone_name=os.getenv("TIMEZONE", "local"),
+            server_name=first_present(("SERVER_NAME", "ARK_SERVER_NAME")),
             state_file=Path(os.getenv("STATE_FILE", ".ark-log-bot-state.json")),
             send_existing_on_first_run=parse_bool(
                 os.getenv("SEND_EXISTING_ON_FIRST_RUN"), False
@@ -97,6 +150,27 @@ class AppConfig:
             ("FTP_HOST", self.ftp_host),
             ("FTP_USERNAME", self.ftp_username),
             ("FTP_PASSWORD", self.ftp_password),
+        ):
+            if not value:
+                missing.append(field_name)
+        return missing
+
+    def missing_discord_bot_fields(self) -> list[str]:
+        missing: list[str] = []
+        for field_name, value in (
+            ("DISCORD_BOT_TOKEN", self.discord_bot_token),
+            ("DISCORD_ALERT_CHANNEL_ID", self.discord_alert_channel_id),
+        ):
+            if not value:
+                missing.append(field_name)
+        return missing
+
+    def missing_rcon_fields(self) -> list[str]:
+        missing: list[str] = []
+        for field_name, value in (
+            ("RCON_HOST", self.rcon_host),
+            ("RCON_PORT", self.rcon_port),
+            ("RCON_PASSWORD", self.rcon_password),
         ):
             if not value:
                 missing.append(field_name)
