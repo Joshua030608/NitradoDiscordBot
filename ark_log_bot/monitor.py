@@ -73,6 +73,13 @@ class ArkLogMonitor:
 
         seen = set(state.seen_event_keys)
         new_events = [event for event in report.events if event_key(event) not in seen]
+        if self.config.rcon_presence_enabled() and state.recent_presence_keys:
+            presence_keys = set(state.recent_presence_keys)
+            new_events = [
+                event
+                for event in new_events
+                if _presence_dedupe_key(event) not in presence_keys
+            ]
         first_run = not state.initialized
         send_existing = (
             self.config.send_existing_on_first_run
@@ -154,3 +161,18 @@ class ArkLogMonitor:
             server_name=self.config.server_name or server_name,
             source_name=Path(source_name).name,
         )
+
+
+def _presence_dedupe_key(event: Event) -> str | None:
+    category = event.category.upper()
+    if category not in {"JOIN", "LEAVE"}:
+        return None
+
+    action = " joined " if category == "JOIN" else " left "
+    if action not in event.message:
+        return None
+
+    player_name = event.message.split(action, 1)[0].strip()
+    if not player_name:
+        return None
+    return f"{category}:{player_name.casefold()}"

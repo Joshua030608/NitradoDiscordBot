@@ -19,6 +19,12 @@ EXTENDED_LOG = (
     "12:00:00: Tribemember Guppy - Lvl 49 was killed by a Direwolf - Lvl 114!"
 )
 
+LEAVE_LOG = (
+    STARTUP_LOG
+    + "\n[2026.06.25-21.14.08:000][  0]YasHFlasH1 "
+    "[UniqueNetId:abc Platform:STEAM] left this ARK!"
+)
+
 
 class MonitorTests(unittest.TestCase):
     def test_first_run_baselines_then_sends_only_new_events(self) -> None:
@@ -61,6 +67,38 @@ class MonitorTests(unittest.TestCase):
             self.assertEqual(len(evaluation.events_to_send), 2)
             self.assertFalse(evaluation.baseline_saved)
 
+    def test_suppresses_delayed_log_presence_event_after_rcon_presence_alert(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            log_path = temp_path / "ShooterGame.log"
+            state_path = temp_path / "state.json"
+            log_path.write_text(LEAVE_LOG, encoding="utf-8")
+            config = _config(state_path)
+            config.rcon_host = "127.0.0.1"
+            config.rcon_port = 27020
+            config.rcon_password = "secret"
+
+            monitor = ArkLogMonitor(
+                config,
+                MonitorOptions(local_log=log_path, no_discord=True, send_existing=True),
+            )
+            state = config.state_file
+            state.write_text(
+                (
+                    '{"initialized": true, "last_log_size": 0, '
+                    '"seen_event_keys": [], '
+                    '"recent_presence_keys": ["LEAVE:yashflash1"]}'
+                ),
+                encoding="utf-8",
+            )
+
+            evaluation = monitor.evaluate_once()
+
+            self.assertEqual(
+                [event.category for event in evaluation.events_to_send],
+                ["STARTUP", "JOIN"],
+            )
+
 
 def _config(state_file: Path) -> AppConfig:
     return AppConfig(
@@ -81,6 +119,7 @@ def _config(state_file: Path) -> AppConfig:
         rcon_port=None,
         rcon_password=None,
         rcon_timeout_seconds=8,
+        rcon_presence_poll_seconds=15,
         nitrado_api_token=None,
         nitrado_service_id=None,
         nitrado_timeout_seconds=15,

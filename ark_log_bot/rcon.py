@@ -228,10 +228,10 @@ def _parse_player_line(line: str) -> RconPlayer | None:
         parts = [part.strip() for part in name.split(",")]
         first = parts[0]
         last = parts[-1]
-        if _looks_like_steam_id(last):
+        if _looks_like_player_id(last):
             name = ", ".join(parts[:-1]).strip()
             steam_id = last
-        elif _looks_like_steam_id(first):
+        elif _looks_like_player_id(first):
             name = ", ".join(parts[1:]).strip()
             steam_id = first
 
@@ -240,8 +240,10 @@ def _parse_player_line(line: str) -> RconPlayer | None:
     return RconPlayer(index=index, name=name, steam_id=steam_id)
 
 
-def _looks_like_steam_id(value: str) -> bool:
-    return value.isdigit() and len(value) >= 15
+def _looks_like_player_id(value: str) -> bool:
+    if len(value) < 15:
+        return False
+    return all(character.isalnum() for character in value)
 
 
 def _recv_exact(sock: socket.socket, size: int) -> bytes:

@@ -12,7 +12,8 @@ from .config import AppConfig
 from .monitor import ArkLogMonitor, MonitorEvaluation, MonitorOptions
 from .nitrado import NitradoClient, NitradoError, NitradoGameserver, NitradoService
 from .parser import Event
-from .rcon import ListPlayersResult, RconClient, RconError
+from .rcon import ListPlayersResult, RconClient, RconError, RconPlayer
+from .state import BotState
 
 try:
     import discord
@@ -39,9 +40,13 @@ class ArkDiscordBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
         self._poll_lock = asyncio.Lock()
         self._poll_task: asyncio.Task[None] | None = None
+        self._presence_task: asyncio.Task[None] | None = None
         self._last_poll_at: datetime | None = None
         self._last_poll_error: str | None = None
+        self._last_presence_poll_at: datetime | None = None
+        self._last_presence_error: str | None = None
         self._last_sent_count = 0
+        self._last_presence_sent_count = 0
         self._last_baseline_count = 0
         self._recent_events: deque[Event] = deque(maxlen=MAX_RECENT_EVENTS)
         self._commands_registered = False
@@ -57,14 +62,20 @@ class ArkDiscordBot(discord.Client):
             print(f"Synced {len(synced)} global Discord command group(s).")
 
         self._poll_task = asyncio.create_task(self._poll_loop(), name="ark-log-poll-loop")
+        if self.config.rcon_presence_enabled():
+            self._presence_task = asyncio.create_task(
+                self._presence_loop(),
+                name="ark-rcon-presence-loop",
+            )
 
     async def close(self) -> None:
-        if self._poll_task is not None:
-            self._poll_task.cancel()
-            try:
-                await self._poll_task
-            except asyncio.CancelledError:
-                pass
+        for task in (self._poll_task, self._presence_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
         await super().close()
 
     async def on_ready(self) -> None:
@@ -157,6 +168,21 @@ class ArkDiscordBot(discord.Client):
                 await self._poll_once()
             await asyncio.sleep(self.config.poll_seconds)
 
+    async def _presence_loop(self) -> None:
+        await self.wait_until_ready()
+        print(
+            "RCON player presence monitor started. "
+            f"Polling every {self.config.rcon_presence_poll_seconds}s."
+        )
+        while not self.is_closed():
+            try:
+                await self._presence_once()
+            except Exception as exc:
+                self._last_presence_poll_at = datetime.now(timezone.utc)
+                self._last_presence_error = str(exc)
+                print(f"RCON presence poll error: {exc}", file=sys.stderr)
+            await asyncio.sleep(self.config.rcon_presence_poll_seconds)
+
     async def _poll_once(self) -> None:
         try:
             evaluation = await asyncio.to_thread(self.monitor.evaluate_once)
@@ -179,11 +205,20 @@ class ArkDiscordBot(discord.Client):
             print(f"Discord bot poll error: {exc}", file=sys.stderr)
 
     async def _send_event_alerts(self, evaluation: MonitorEvaluation) -> None:
-        channel = await self._alert_channel()
-        source_name = Path(evaluation.report.source).name
-        server_name = self.config.server_name or evaluation.report.server_name
+        await self._send_alert_events(
+            evaluation.events_to_send,
+            source_name=Path(evaluation.report.source).name,
+            server_name=self.config.server_name or evaluation.report.server_name,
+        )
 
-        for events in _chunks(evaluation.events_to_send, MAX_EVENTS_PER_DISCORD_MESSAGE):
+    async def _send_alert_events(
+        self,
+        events_to_send: list[Event],
+        source_name: str,
+        server_name: str | None = None,
+    ) -> None:
+        channel = await self._alert_channel()
+        for events in _chunks(events_to_send, MAX_EVENTS_PER_DISCORD_MESSAGE):
             embeds = [
                 discord.Embed.from_dict(embed)
                 for embed in build_event_embed_dicts(
@@ -198,6 +233,56 @@ class ArkDiscordBot(discord.Client):
                 embeds=embeds,
                 allowed_mentions=_allowed_mentions_for_user(self.config.discord_user_id),
             )
+
+    async def _presence_once(self) -> None:
+        result = await asyncio.to_thread(self._run_rcon, lambda client: client.list_players())
+        current_players = {
+            _presence_player_key(player): player.name
+            for player in result.players
+        }
+
+        state = BotState.load(self.config.state_file)
+        now = datetime.now(timezone.utc)
+        if not state.presence_initialized:
+            state.presence_initialized = True
+            state.online_players = current_players
+            state.save(self.config.state_file)
+            self._last_presence_poll_at = now
+            self._last_presence_error = None
+            print(f"RCON presence baseline saved with {len(current_players)} online player(s).")
+            return
+
+        previous_players = state.online_players
+        joined_keys = sorted(set(current_players) - set(previous_players))
+        left_keys = sorted(set(previous_players) - set(current_players))
+        events: list[Event] = []
+        presence_keys: list[str] = []
+
+        for key in joined_keys:
+            name = current_players[key]
+            events.append(Event(now, "JOIN", f"{name} joined (RCON live)"))
+            presence_keys.append(_presence_event_key("JOIN", name))
+        for key in left_keys:
+            name = previous_players.get(key, key)
+            events.append(Event(now, "LEAVE", f"{name} left (RCON live)"))
+            presence_keys.append(_presence_event_key("LEAVE", name))
+
+        if events:
+            await self._send_alert_events(
+                events,
+                source_name="RCON player presence",
+                server_name=self.config.server_name,
+            )
+            self._recent_events.extend(events)
+            print(f"Posted {len(events)} RCON presence event(s) to Discord.")
+
+        state.online_players = current_players
+        if presence_keys:
+            state.remember_presence(presence_keys)
+        state.save(self.config.state_file)
+        self._last_presence_poll_at = now
+        self._last_presence_error = None
+        self._last_presence_sent_count = len(events)
 
     async def _alert_channel(self):
         channel_id = self.config.discord_alert_channel_id
@@ -456,7 +541,22 @@ class ArkDiscordBot(discord.Client):
         missing = self.config.missing_rcon_fields()
         if missing:
             return "Not configured: " + ", ".join(missing)
-        return f"Configured for {self.config.rcon_host}:{self.config.rcon_port}"
+        lines = [
+            f"Configured for {self.config.rcon_host}:{self.config.rcon_port}",
+        ]
+        if self.config.rcon_presence_enabled():
+            last_poll = (
+                _discord_timestamp(self._last_presence_poll_at)
+                if self._last_presence_poll_at
+                else "never"
+            )
+            lines.append(
+                f"Presence poll: every {self.config.rcon_presence_poll_seconds}s, last {last_poll}"
+            )
+            lines.append(f"Last presence batch: {self._last_presence_sent_count} event(s)")
+            if self._last_presence_error:
+                lines.append(f"Presence error: {_truncate(self._last_presence_error, 120)}")
+        return "\n".join(lines)
 
     def _nitrado_config_status(self) -> str:
         missing = self.config.missing_nitrado_fields()
@@ -518,6 +618,16 @@ def _players_embed(result: ListPlayersResult) -> discord.Embed:
         lines.append(f"{player.index}. {player.name}{steam}")
     embed.description = "\n".join(lines)
     return embed
+
+
+def _presence_player_key(player: RconPlayer) -> str:
+    if player.steam_id:
+        return player.steam_id.casefold()
+    return player.name.casefold()
+
+
+def _presence_event_key(category: str, player_name: str) -> str:
+    return f"{category.upper()}:{player_name.casefold()}"
 
 
 def _nitrado_status_embed(gameserver: NitradoGameserver) -> discord.Embed:

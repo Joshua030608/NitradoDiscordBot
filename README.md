@@ -140,6 +140,11 @@ python3 -m ark_log_bot --rcon-command "Broadcast Bot test"
 `SaveWorld` may return an empty response on success, so a clean connection and
 no RCON exception is treated as accepted.
 
+The bot also polls RCON for player presence when RCON is configured. This gives
+faster join/leave alerts than waiting for Nitrado FTP to expose delayed
+`ShooterGame.log` writes. Set `RCON_PRESENCE_POLL_SECONDS=0` to disable the
+live presence watcher.
+
 ## Test Nitrado API
 
 Fill in `NITRADO_API_TOKEN`, then list services to find the service ID:
@@ -175,6 +180,7 @@ python3 -m ark_log_bot --test-nitrado
 | `RCON_PORT` | ARK server RCON port. |
 | `RCON_PASSWORD` | ARK RCON password. |
 | `RCON_TIMEOUT_SECONDS` | Socket timeout for RCON connects and commands. |
+| `RCON_PRESENCE_POLL_SECONDS` | Seconds between live RCON player join/leave checks. Set `0` to disable. |
 | `NITRADO_API_TOKEN` | Nitrado API bearer token. |
 | `NITRADO_SERVICE_ID` | Numeric Nitrado service ID for this gameserver. |
 | `NITRADO_TIMEOUT_SECONDS` | HTTP timeout for Nitrado API calls. |

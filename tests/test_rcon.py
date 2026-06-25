@@ -97,16 +97,19 @@ class RconTests(unittest.TestCase):
             "0. LilGuppy, 76561198000000000\n"
             "1. YasHFlasH1\n"
             "2. 76561198000000001, AnotherPlayer\n"
+            "3. YasHFlasH1, 0002dfb3c8934ab880f70b167f1a2204\n"
             "Unparsed diagnostic line"
         )
 
-        self.assertEqual(len(result.players), 3)
+        self.assertEqual(len(result.players), 4)
         self.assertEqual(result.players[0].name, "LilGuppy")
         self.assertEqual(result.players[0].steam_id, "76561198000000000")
         self.assertEqual(result.players[1].name, "YasHFlasH1")
         self.assertIsNone(result.players[1].steam_id)
         self.assertEqual(result.players[2].name, "AnotherPlayer")
         self.assertEqual(result.players[2].steam_id, "76561198000000001")
+        self.assertEqual(result.players[3].name, "YasHFlasH1")
+        self.assertEqual(result.players[3].steam_id, "0002dfb3c8934ab880f70b167f1a2204")
 
     def test_list_players_convenience(self) -> None:
         with FakeRconServer() as server:

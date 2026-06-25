@@ -18,6 +18,7 @@ class ConfigTests(unittest.TestCase):
             "RCON_HOST": "example.rcon",
             "RCON_PORT": "27020",
             "RCON_PASSWORD": "secret",
+            "RCON_PRESENCE_POLL_SECONDS": "10",
             "NITRADO_API_TOKEN": "nitrado-token",
             "NITRADO_SERVICE_ID": "123456",
             "SERVER_NAME": "Guppy's Collectibles Ragnarok",
@@ -33,6 +34,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.rcon_host, "example.rcon")
         self.assertEqual(config.rcon_port, 27020)
         self.assertEqual(config.rcon_password, "secret")
+        self.assertEqual(config.rcon_presence_poll_seconds, 10)
+        self.assertTrue(config.rcon_presence_enabled())
         self.assertEqual(config.nitrado_api_token, "nitrado-token")
         self.assertEqual(config.nitrado_service_id, 123456)
         self.assertEqual(config.server_name, "Guppy's Collectibles Ragnarok")
