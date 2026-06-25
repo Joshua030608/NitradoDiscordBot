@@ -134,7 +134,7 @@ class connected_client:
         self,
         server: FakeRconServer,
         password: str,
-        command_quiet_seconds: float = 1.0,
+        command_quiet_seconds: float = 0.05,
     ) -> None:
         self.server = server
         self.client = RconClient(
