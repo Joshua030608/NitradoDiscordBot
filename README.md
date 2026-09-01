@@ -10,20 +10,22 @@ The bot supports two Discord modes:
 - Discord bot mode posts the same alerts and adds `/ark` slash commands powered
   by ARK RCON plus optional `/nitrado` hosting controls.
 
-## Project Steps
+## Highlights
 
-1. Build and test the Python log monitor locally.
-2. Create a Discord server/channel and a webhook for alerts.
-3. Confirm the Nitrado FTP host, username, password, and remote
-   `ShooterGame.log` path.
-4. Run the monitor locally in dry-run mode, then with the webhook enabled.
-5. Create an AWS Free Tier EC2 instance.
-6. Copy the repo and `.env` to EC2.
-7. Configure a `systemd` service so the bot starts automatically and restarts
-   after crashes or reboots.
-8. Configure Discord bot, RCON, and optional Nitrado API settings for slash commands.
+- Parses a remote ARK log into structured timeline events and suppresses
+  duplicates across polling cycles.
+- Uses FTP for log retrieval, RCON for live player presence and server commands,
+  Discord for alerts and slash commands, and the Nitrado REST API for optional
+  hosting controls.
+- Persists monitor state across restarts and handles log rotation without
+  replaying old events.
+- Includes automated tests for parsing, monitoring, configuration, RCON packet
+  handling, state persistence, alert formatting, and Nitrado API requests.
 
-## Local Setup
+## Quick Start
+
+Create a virtual environment, copy the configuration template, and install the
+optional Discord bot dependency:
 
 ```sh
 python3 -m venv .venv
@@ -42,6 +44,12 @@ python3 -m pip install -r requirements.txt
 Webhook monitor mode, FTP, parsing, and RCON packet handling use Python's
 standard library. Discord bot mode needs `discord.py`.
 
+Run the automated test suite:
+
+```sh
+python3 -m unittest discover
+```
+
 Send one test message to the configured webhook:
 
 ```sh
@@ -54,17 +62,11 @@ Dry-run the parser without posting to Discord:
 
 ```sh
 python3 -m ark_log_bot \
-  --local-log /Users/joshuaford/Downloads/ShooterGame.log \
+  --local-log /path/to/ShooterGame.log \
   --once \
   --send-existing \
   --no-discord \
   --print-events
-```
-
-Run the unit tests:
-
-```sh
-python3 -m unittest discover
 ```
 
 ## Run Against FTP Once
@@ -194,3 +196,22 @@ python3 -m ark_log_bot --test-nitrado
 | `SEND_EXISTING_ON_FIRST_RUN` | Send existing events when no state file exists. |
 | `INCLUDE_SAVES` | Include every world-save event in Discord alerts. |
 | `MAX_SEEN_EVENTS` | Maximum remembered event fingerprints. |
+
+## Project Structure
+
+```text
+ark_log_bot/  Application modules: parsing, monitoring, FTP, RCON, Discord, and Nitrado API
+deploy/       Example systemd service for an always-on host
+docs/         Integration planning notes
+tests/        Automated unit tests
+```
+
+## Security and Operations
+
+- Keep credentials only in `.env`; the repository ignores that file and includes
+  placeholders in `.env.example`.
+- Restrict `DISCORD_ADMIN_USER_IDS` before enabling server-control commands.
+- Start with `--no-discord` or dry-run behavior when validating a new log path or
+  server configuration.
+- The `deploy/ark-log-bot.service` example is a starting point for an EC2 or
+  other Linux deployment; adapt paths and the service user before enabling it.
