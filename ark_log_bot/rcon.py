@@ -16,19 +16,19 @@ PACKET_HEADER = struct.Struct("<iii")
 
 
 class RconError(RuntimeError):
-    """Base class for RCON failures."""
+    pass
 
 
 class RconAuthenticationError(RconError):
-    """Raised when the RCON server rejects the password."""
+    pass
 
 
 class RconProtocolError(RconError):
-    """Raised when the RCON server sends malformed data."""
+    pass
 
 
 class RconTimeoutError(RconError):
-    """Raised when the RCON server does not answer in time."""
+    pass
 
 
 @dataclass(frozen=True)

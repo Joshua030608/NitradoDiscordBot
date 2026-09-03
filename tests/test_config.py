@@ -22,7 +22,7 @@ class ConfigTests(unittest.TestCase):
             "RCON_PRESENCE_DEDUPE_SECONDS": "1800",
             "NITRADO_API_TOKEN": "nitrado-token",
             "NITRADO_SERVICE_ID": "123456",
-            "SERVER_NAME": "Guppy's Collectibles Ragnarok",
+            "SERVER_NAME": "Example ARK Server",
         }
 
         with patch.dict(os.environ, env, clear=True):
@@ -40,7 +40,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(config.rcon_presence_enabled())
         self.assertEqual(config.nitrado_api_token, "nitrado-token")
         self.assertEqual(config.nitrado_service_id, 123456)
-        self.assertEqual(config.server_name, "Guppy's Collectibles Ragnarok")
+        self.assertEqual(config.server_name, "Example ARK Server")
 
     def test_defaults_admins_to_pinged_user(self) -> None:
         with patch.dict(os.environ, {"DISCORD_USER_ID": "123456789012345678"}, clear=True):

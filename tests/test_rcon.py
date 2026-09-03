@@ -63,8 +63,8 @@ class FakeRconServer:
                 continue
 
             if packet.body == "ListPlayers":
-                _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "0. LilGuppy, "))
-                _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "76561198000000000\n1. YasHFlasH1"))
+                _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "0. TestPlayer, "))
+                _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "76561198000000000\n1. SecondPlayer"))
             elif packet.body == "SaveWorld":
                 _send_packet(conn, RconPacket(packet.request_id, SERVERDATA_RESPONSE_VALUE, "World Saved"))
             elif packet.body.startswith("Broadcast "):
@@ -79,32 +79,32 @@ class RconTests(unittest.TestCase):
             with connected_client(server, "secret") as client:
                 result = client.command("ListPlayers")
 
-        self.assertEqual(result, "0. LilGuppy, 76561198000000000\n1. YasHFlasH1")
+        self.assertEqual(result, "0. TestPlayer, 76561198000000000\n1. SecondPlayer")
 
     def test_command_returns_after_quiet_period(self) -> None:
         with FakeRconServer() as server:
             with connected_client(server, "secret", command_quiet_seconds=0.05) as client:
                 result = client.command("ListPlayers")
 
-        self.assertEqual(result, "0. LilGuppy, 76561198000000000\n1. YasHFlasH1")
+        self.assertEqual(result, "0. TestPlayer, 76561198000000000\n1. SecondPlayer")
 
     def test_parses_list_players(self) -> None:
         result = parse_list_players(
-            "0. LilGuppy, 76561198000000000\n"
-            "1. YasHFlasH1\n"
+            "0. TestPlayer, 76561198000000000\n"
+            "1. SecondPlayer\n"
             "2. 76561198000000001, AnotherPlayer\n"
-            "3. YasHFlasH1, 0002dfb3c8934ab880f70b167f1a2204\n"
+            "3. SecondPlayer, 0002dfb3c8934ab880f70b167f1a2204\n"
             "Unparsed diagnostic line"
         )
 
         self.assertEqual(len(result.players), 4)
-        self.assertEqual(result.players[0].name, "LilGuppy")
+        self.assertEqual(result.players[0].name, "TestPlayer")
         self.assertEqual(result.players[0].steam_id, "76561198000000000")
-        self.assertEqual(result.players[1].name, "YasHFlasH1")
+        self.assertEqual(result.players[1].name, "SecondPlayer")
         self.assertIsNone(result.players[1].steam_id)
         self.assertEqual(result.players[2].name, "AnotherPlayer")
         self.assertEqual(result.players[2].steam_id, "76561198000000001")
-        self.assertEqual(result.players[3].name, "YasHFlasH1")
+        self.assertEqual(result.players[3].name, "SecondPlayer")
         self.assertEqual(result.players[3].steam_id, "0002dfb3c8934ab880f70b167f1a2204")
 
     def test_list_players_convenience(self) -> None:
@@ -112,7 +112,7 @@ class RconTests(unittest.TestCase):
             with connected_client(server, "secret") as client:
                 result = client.list_players()
 
-        self.assertEqual([player.name for player in result.players], ["LilGuppy", "YasHFlasH1"])
+        self.assertEqual([player.name for player in result.players], ["TestPlayer", "SecondPlayer"])
 
     def test_save_world(self) -> None:
         with FakeRconServer() as server:

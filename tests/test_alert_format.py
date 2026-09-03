@@ -9,7 +9,7 @@ from ark_log_bot.parser import Event
 
 class AlertFormatTests(unittest.TestCase):
     def test_builds_ping_content_for_every_batch(self) -> None:
-        events = [Event(datetime(2026, 6, 25, 12, tzinfo=timezone.utc), "JOIN", "LilGuppy joined")]
+        events = [Event(datetime(2026, 6, 25, 12, tzinfo=timezone.utc), "JOIN", "TestPlayer joined")]
 
         content = build_event_message_content(events, "123456789012345678")
 
@@ -24,14 +24,14 @@ class AlertFormatTests(unittest.TestCase):
         embeds = build_event_embed_dicts(
             events,
             "recorded",
-            server_name="Guppy's Collectibles Ragnarok",
+            server_name="Example ARK Server",
         )
 
         self.assertEqual(len(embeds), 2)
         self.assertEqual(len(embeds[0]["fields"]), 10)
         self.assertEqual(len(embeds[1]["fields"]), 1)
         self.assertEqual(embeds[0]["color"], 0xD92D20)
-        self.assertEqual(embeds[0]["footer"]["text"], "Guppy's Collectibles Ragnarok • ShooterGame.log")
+        self.assertEqual(embeds[0]["footer"]["text"], "Example ARK Server • ShooterGame.log")
 
 
 if __name__ == "__main__":

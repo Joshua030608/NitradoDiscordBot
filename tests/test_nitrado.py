@@ -45,7 +45,7 @@ class NitradoClientTests(unittest.TestCase):
                             "status": "active",
                             "type": "gameserver",
                             "details": {
-                                "name": "Guppy's Collectibles Ragnarok",
+                                "name": "Example ARK Server",
                                 "game": "ARK: Survival Ascended",
                                 "address": "31.214.239.80:7777",
                                 "slots": 20,

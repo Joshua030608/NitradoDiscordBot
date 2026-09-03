@@ -8,12 +8,12 @@ from ark_log_bot.parser import analyze_text
 SAMPLE_LOG = """
 [2026.06.25-07.36.06:195][  0]Log file open, 06/25/26 03:36:06
 [2026.06.25-07.36.06:750][  0]ARK Version: 88.25
-[2026.06.25-07.37.22:000][  0]Server: "Guppy's Collectibles Ragnarok" has successfully started!
+[2026.06.25-07.37.22:000][  0]Server: "Example ARK Server" has successfully started!
 [2026.06.25-07.37.22:100][  0]Steam Subsystem initialized: FAILED
 [2026.06.25-07.37.45:000][  0]Server has completed startup and is now advertising for join (10.95GB Mem)
-[2026.06.25-17.40.03:000][  0]LilGuppy [UniqueNetId:123 Platform:STEAM] joined this ARK!
-[2026.06.25-17.46.46:000][  0]Tribe Tribe of Guppy, ID 123: Day 1, 12:00:00: Your Tribe Tamed a Juvenile Kentrosaurus - Lvl 24 (Kentrosaurus)!
-[2026.06.25-17.47.23:000][  0]Tribe Tribe of Guppy, ID 123: Day 1, 12:00:00: Tribemember Guppy - Lvl 49 was killed by a Direwolf - Lvl 114!
+[2026.06.25-17.40.03:000][  0]TestPlayer [UniqueNetId:123 Platform:STEAM] joined this ARK!
+[2026.06.25-17.46.46:000][  0]Tribe Test Tribe, ID 123: Day 1, 12:00:00: Your Tribe Tamed a Juvenile Kentrosaurus - Lvl 24 (Kentrosaurus)!
+[2026.06.25-17.47.23:000][  0]Tribe Test Tribe, ID 123: Day 1, 12:00:00: Tribemember TestPlayer - Lvl 49 was killed by a Direwolf - Lvl 114!
 """.strip()
 
 
@@ -28,10 +28,10 @@ class ParserTests(unittest.TestCase):
         )
 
         messages = [event.message for event in report.events]
-        self.assertIn('Server "Guppy\'s Collectibles Ragnarok" started', messages)
-        self.assertIn("LilGuppy joined (STEAM)", messages)
+        self.assertIn('Server "Example ARK Server" started', messages)
+        self.assertIn("TestPlayer joined (STEAM)", messages)
         self.assertIn(
-            "Guppy - Lvl 49 was killed by a Direwolf - Lvl 114! (Tribe: Tribe of Guppy)",
+            "TestPlayer - Lvl 49 was killed by a Direwolf - Lvl 114! (Tribe: Test Tribe)",
             messages,
         )
 
@@ -47,4 +47,3 @@ class ParserTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

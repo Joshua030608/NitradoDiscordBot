@@ -27,9 +27,9 @@ class BotStateTests(unittest.TestCase):
             state_path = Path(temp) / "state.json"
             initial = BotState(
                 presence_initialized=True,
-                online_players={"steam123": "Guppy"},
+                online_players={"steam123": "TestPlayer"},
                 recent_presence_events={
-                    "JOIN:guppy": "2026-06-25T21:45:00+00:00",
+                    "JOIN:testplayer": "2026-06-25T21:45:00+00:00",
                 },
             )
             initial.save(state_path)
@@ -47,10 +47,10 @@ class BotStateTests(unittest.TestCase):
             self.assertEqual(saved.last_log_size, 1234)
             self.assertEqual(saved.seen_event_keys, ["event-a", "event-b"])
             self.assertTrue(saved.presence_initialized)
-            self.assertEqual(saved.online_players, {"steam123": "Guppy"})
+            self.assertEqual(saved.online_players, {"steam123": "TestPlayer"})
             self.assertEqual(
                 saved.recent_presence_events,
-                {"JOIN:guppy": "2026-06-25T21:45:00+00:00"},
+                {"JOIN:testplayer": "2026-06-25T21:45:00+00:00"},
             )
 
     def test_presence_update_preserves_monitor_fields(self) -> None:
@@ -65,10 +65,10 @@ class BotStateTests(unittest.TestCase):
 
             update = BotState(
                 presence_initialized=True,
-                online_players={"steam456": "YasHFlasH1"},
+                online_players={"steam456": "SecondPlayer"},
             )
             update.remember_presence(
-                ["LEAVE:yashflash1"],
+                ["LEAVE:secondplayer"],
                 datetime(2026, 6, 25, 21, 45, tzinfo=timezone.utc),
             )
             update.save_presence_update(state_path)
@@ -79,10 +79,10 @@ class BotStateTests(unittest.TestCase):
             self.assertEqual(saved.last_log_size, 5678)
             self.assertEqual(saved.seen_event_keys, ["event-a"])
             self.assertTrue(saved.presence_initialized)
-            self.assertEqual(saved.online_players, {"steam456": "YasHFlasH1"})
+            self.assertEqual(saved.online_players, {"steam456": "SecondPlayer"})
             self.assertEqual(
                 saved.recent_presence_events,
-                {"LEAVE:yashflash1": "2026-06-25T21:45:00+00:00"},
+                {"LEAVE:secondplayer": "2026-06-25T21:45:00+00:00"},
             )
 
 

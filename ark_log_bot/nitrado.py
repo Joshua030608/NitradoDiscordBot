@@ -12,11 +12,11 @@ NITRADO_API_BASE_URL = "https://api.nitrado.net"
 
 
 class NitradoError(RuntimeError):
-    """Base class for Nitrado API failures."""
+    pass
 
 
 class NitradoApiError(NitradoError):
-    """Raised when the Nitrado API returns an error response."""
+    pass
 
 
 @dataclass(frozen=True)

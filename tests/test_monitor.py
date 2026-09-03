@@ -9,19 +9,19 @@ from ark_log_bot.monitor import ArkLogMonitor, MonitorOptions
 
 
 STARTUP_LOG = """
-[2026.06.25-07.37.22:000][  0]Server: "Guppy's Collectibles Ragnarok" has successfully started!
-[2026.06.25-17.40.03:000][  0]LilGuppy [UniqueNetId:123 Platform:STEAM] joined this ARK!
+[2026.06.25-07.37.22:000][  0]Server: "Example ARK Server" has successfully started!
+[2026.06.25-17.40.03:000][  0]TestPlayer [UniqueNetId:123 Platform:STEAM] joined this ARK!
 """.strip()
 
 EXTENDED_LOG = (
     STARTUP_LOG
-    + "\n[2026.06.25-17.47.23:000][  0]Tribe Tribe of Guppy, ID 123: Day 1, "
-    "12:00:00: Tribemember Guppy - Lvl 49 was killed by a Direwolf - Lvl 114!"
+    + "\n[2026.06.25-17.47.23:000][  0]Tribe Test Tribe, ID 123: Day 1, "
+    "12:00:00: Tribemember TestPlayer - Lvl 49 was killed by a Direwolf - Lvl 114!"
 )
 
 LEAVE_LOG = (
     STARTUP_LOG
-    + "\n[2026.06.25-21.14.08:000][  0]YasHFlasH1 "
+    + "\n[2026.06.25-21.14.08:000][  0]SecondPlayer "
     "[UniqueNetId:abc Platform:STEAM] left this ARK!"
 )
 
@@ -88,7 +88,7 @@ class MonitorTests(unittest.TestCase):
                     '{"initialized": true, "last_log_size": 0, '
                     '"seen_event_keys": [], '
                     '"recent_presence_events": {'
-                    '"LEAVE:yashflash1": "2026-06-25T21:45:00+00:00"'
+                    '"LEAVE:secondplayer": "2026-06-25T21:45:00+00:00"'
                     "}}"
                 ),
                 encoding="utf-8",
@@ -122,7 +122,7 @@ class MonitorTests(unittest.TestCase):
                     '{"initialized": true, "last_log_size": 0, '
                     '"seen_event_keys": [], '
                     '"recent_presence_events": {'
-                    '"LEAVE:yashflash1": "2026-06-25T21:45:00+00:00"'
+                    '"LEAVE:secondplayer": "2026-06-25T21:45:00+00:00"'
                     "}}"
                 ),
                 encoding="utf-8",
